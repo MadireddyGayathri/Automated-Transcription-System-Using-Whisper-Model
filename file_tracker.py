@@ -61,13 +61,15 @@ class FileTracker:
         except OSError:
             return None, None
 
-    def needs_processing(self, filepath: str) -> bool:
+    def needs_processing(self, filepath: str, force: bool = False) -> bool:
         """
         True if this file has never been seen, previously failed,
-        was left mid-transcription by a crash, or has changed since
-        it was last marked done.
+        was left mid-transcription by a crash, has changed since it was
+        last marked done, or has been forced to reprocess.
         """
         with self._lock:
+            if force:
+                return True
             entry = self._state.get(filepath)
             if entry is None:
                 return True

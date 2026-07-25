@@ -43,6 +43,7 @@ Optional arguments:
 - `--model`: Whisper model size (`tiny`, `base`, `small`, `medium`, `large`, `large-v2`, `large-v3`). Default: `base`.
 - `--language`: Language code (e.g. `en`). Omit to auto-detect.
 - `--no-watch`: Run only the initial scan and exit.
+- `--force`: Force transcription of files even if they already have a recorded result.
 
 Example:
 

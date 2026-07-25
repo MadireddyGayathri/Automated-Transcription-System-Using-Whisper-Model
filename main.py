@@ -48,7 +48,7 @@ def setup_logging(watch_root: str):
 
 
 def worker_loop(work_queue: "queue.Queue", tracker: FileTracker,
-                 transcriber: WhisperTranscriber):
+                 transcriber: WhisperTranscriber, force: bool):
     while not shutdown_event.is_set():
         try:
             filepath = work_queue.get(timeout=1)
@@ -68,7 +68,7 @@ def worker_loop(work_queue: "queue.Queue", tracker: FileTracker,
 
             # Re-check: another trigger (e.g. both the initial scan and a
             # watchdog event) may have already queued/finished this file.
-            if not tracker.needs_processing(filepath):
+            if not tracker.needs_processing(filepath, force=force):
                 continue
 
             tracker.mark_in_progress(filepath)
@@ -105,6 +105,8 @@ def main():
     parser.add_argument("--no-watch", action="store_true",
                          help="Run the initial scan only, then exit "
                               "(no real-time monitoring).")
+    parser.add_argument("--force", action="store_true",
+                         help="Force transcription of files even if already completed.")
     args = parser.parse_args()
 
     watch_root = os.path.abspath(args.directory)
@@ -131,18 +133,20 @@ def main():
     for filepath in stale:
         work_queue.put(filepath)
 
-    scan_existing(watch_root, tracker, work_queue)
+    scan_existing(watch_root, tracker, work_queue, force=args.force)
 
     workers = []
     for i in range(config.NUM_WORKERS):
-        t = threading.Thread(target=worker_loop, args=(work_queue, tracker, transcriber),
-                              name=f"worker-{i}", daemon=True)
+        t = threading.Thread(target=worker_loop,
+                             args=(work_queue, tracker, transcriber, args.force),
+                             name=f"worker-{i}", daemon=True)
         t.start()
         workers.append(t)
 
     observer = None
     if not args.no_watch:
-        observer = start_observer(watch_root, tracker, work_queue)
+        observer = start_observer(watch_root, tracker, work_queue,
+                                  force=args.force)
 
     def handle_sigint(_signum, _frame):
         logger.info("Shutdown requested (Ctrl+C). Finishing current file, "

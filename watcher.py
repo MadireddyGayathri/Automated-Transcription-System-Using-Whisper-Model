@@ -42,7 +42,7 @@ def is_state_or_transcript_file(path: str, watch_root: str) -> bool:
     return False
 
 
-def scan_existing(watch_root: str, tracker, work_queue: "queue.Queue"):
+def scan_existing(watch_root: str, tracker, work_queue: "queue.Queue", force: bool = False):
     """Recursive walk of watch_root and every subdirectory."""
     found = 0
     for dirpath, _dirnames, filenames in os.walk(watch_root):
@@ -52,7 +52,7 @@ def scan_existing(watch_root: str, tracker, work_queue: "queue.Queue"):
                 continue
             if is_state_or_transcript_file(filepath, watch_root):
                 continue
-            if tracker.needs_processing(filepath):
+            if tracker.needs_processing(filepath, force=force):
                 work_queue.put(filepath)
                 found += 1
     logger.info("Initial scan complete: %d file(s) queued for transcription.",
@@ -91,10 +91,12 @@ class MediaEventHandler(FileSystemEventHandler):
     which is fine — the stability check in the worker absorbs that).
     """
 
-    def __init__(self, watch_root: str, tracker, work_queue: "queue.Queue"):
+    def __init__(self, watch_root: str, tracker, work_queue: "queue.Queue",
+                 force: bool = False):
         self.watch_root = watch_root
         self.tracker = tracker
         self.work_queue = work_queue
+        self.force = force
 
     def _consider(self, path: str):
         if os.path.isdir(path):
@@ -103,7 +105,7 @@ class MediaEventHandler(FileSystemEventHandler):
             return
         if is_state_or_transcript_file(path, self.watch_root):
             return
-        if self.tracker.needs_processing(path):
+        if self.tracker.needs_processing(path, force=self.force):
             logger.info("Detected new/changed media file: %s", path)
             self.work_queue.put(path)
 
@@ -118,8 +120,9 @@ class MediaEventHandler(FileSystemEventHandler):
         self._consider(event.dest_path)
 
 
-def start_observer(watch_root: str, tracker, work_queue: "queue.Queue") -> Observer:
-    handler = MediaEventHandler(watch_root, tracker, work_queue)
+def start_observer(watch_root: str, tracker, work_queue: "queue.Queue",
+                   force: bool = False) -> Observer:
+    handler = MediaEventHandler(watch_root, tracker, work_queue, force=force)
     observer = Observer()
     observer.schedule(handler, watch_root, recursive=True)
     observer.start()
